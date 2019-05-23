@@ -1,0 +1,6 @@
+name = S1
+description = Csas scroll entity loader
+package = Csas
+version = VERSION
+core = 7.x
+dependencies[] = entity

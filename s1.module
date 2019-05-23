@@ -1,0 +1,105 @@
+<?php
+
+/**
+ * Implements hook_menu().
+ */
+function s1_menu() {
+  $items['s1/example'] = [
+    'title' => 'Scroll entity loader example',
+    'description' => 'Load ajax entity on vertical scroll page',
+    'page callback' => 's1_example',
+    'access arguments' => ['administer site configuration'],
+    'file' => 's1.example.inc',
+    'menu_name' => 'navigation',
+  ];
+  $items['admin/config/content/s1'] = [
+    'title' => 'S1',
+    'description' => 'Scroll entity loader',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => ['s1_admin_config_form'],
+    'access arguments' => ['administer site configuration'],
+    'file' => 's1.admin.inc',
+  ];
+  $items['s1/load/%/%/%'] = [
+    'page callback' => 's1_load_get_ajax', // Render HTML.
+    'page arguments' => [2, 3, 4],
+    'type' => MENU_CALLBACK,
+    'access callback' => '_s1_entity_access',
+    'access arguments' => [2, 3],
+    'delivery callback' => 's1_load_ajax_callback',
+    'file' => 's1.load.inc',
+  ];
+  return $items;
+}
+
+function _s1_entity_access($entity_type, $id) {
+  $access = &drupal_static(__FUNCTION__, []);
+  $access_key = "{$entity_type}__{$id}";
+  if (isset($access[$access_key])) {
+    return $access[$access_key];
+  }
+  $entity = entity_load($entity_type, [$id]);
+  if (empty($entity)) {
+    $access[$access_key] = FALSE;
+    return $access[$access_key];
+  }
+  else {
+    $entity = reset($entity);
+  }
+  $access[$access_key] = entity_access('view', $entity_type, $entity);
+  return $access[$access_key];
+}
+
+function s1_entity_view_alter(&$build, $type) {
+  $already_view = &drupal_static(__FUNCTION__, []);
+  $m_path = drupal_get_path('module', 's1');
+  $info = entity_get_info($type);
+  $token_type = &$build['#' . $info['token type']];
+  if (empty($token_type)) {
+    return FALSE;
+  }
+  $label = $token_type->{$info['entity keys']['label']};
+  $id = $token_type->{$info['entity keys']['id']};
+  $bundle = $token_type->{$info['entity keys']['bundle']};
+  $view_mode = $build['#view_mode'];
+  $variable_key = "s1_view_mode__{$type}__{$bundle}__{$view_mode}";
+  $use = variable_get($variable_key, FALSE);
+  if (!$use) {
+    return FALSE;
+  }
+  if (request_uri() == "/s1/load/{$type}/{$id}/{$view_mode}") {
+    return FALSE;
+  }
+  if (!isset($already_view[$variable_key])) {
+    $already_view[$variable_key] = TRUE;
+    return FALSE;
+  }
+  $data_s1 = "{$type}/{$id}/{$view_mode}";
+  $build = [
+    '#attached' => [
+      'js' => [$m_path . '/js/s1.load.js'],
+    ],
+    'content' => [
+      '#type' => 'container',
+      '#attributes' => [
+        'class' => [
+          's1',
+        ],
+        'data-s1' => $data_s1,
+      ],
+      [
+        '#type' => 'html_tag',
+        '#tag' => 'span',
+        '#value' => '',
+        '#attributes' => [
+          'class' => ['throbber'],
+        ],
+      ],
+      [
+        '#type' => 'html_tag',
+        '#tag' => 'span',
+        '#value' => $label,
+      ],
+    ],
+  ];
+}
